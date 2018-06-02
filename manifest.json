@@ -1,0 +1,20 @@
+{
+    "manifest_version": 2,
+    "name": "History Graph",
+    "version": "0.1",
+    "description": "Tracks all opened tabs and their relationships.",
+    "icons": {
+        "96": "dist/icons/graph_96.png"
+    },
+    "permissions": ["tabs", "storage"],
+    "content_security_policy":
+        "script-src 'self' 'unsafe-eval'; object-src 'self';",
+    "background": {
+        "scripts": ["dist/background-bundle.js"]
+    },
+    "applications": {
+        "gecko": {
+            "id": "test@ext.com"
+        }
+    }
+}

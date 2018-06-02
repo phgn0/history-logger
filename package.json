@@ -1,0 +1,21 @@
+{
+    "name": "history-graph-extension",
+    "version": "0.1",
+    "main": "index.js",
+    "license": "MIT",
+    "private": true,
+    "dependencies": {
+        "idb": "^2.1.2"
+    },
+    "devDependencies": {
+        "ts-loader": "^4.3.0",
+        "typescript": "^2.8.3",
+        "webpack": "^4.8.3",
+        "webpack-cli": "^2.1.4"
+    },
+    "scripts": {
+        "build": "webpack",
+        "deploy": "yarn build && web-ext run",
+        "web-ext": "web-ext run --firefox-profile /home/peter/.mozilla/firefox/nnbxrkuy.ext-debugging --keep-profile-changes"
+    }
+}
