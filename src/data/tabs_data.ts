@@ -89,6 +89,36 @@ export function updateTabInfo(
     });
 }
 
+export function getAllTabsInfos(): Promise<TabInfo[]> {
+    return getDatabase().then(db => {
+        const transaction = db.transaction(["tabs"]);
+        const objectStore = transaction.objectStore("tabs");
+
+        return objectStore.getAll();
+    });
+}
+
+/**
+ * Delete all saved tab data, and save new records.
+ *
+ * @export
+ * @param {TabInfo[]} newRecords The new tab data to save.
+ * @returns {Promise<void>}
+ */
+export async function replaceAllTabInfos(newRecords: TabInfo[]): Promise<void> {
+    const db = await getDatabase();
+    const transaction = db.transaction(["tabs"], "readwrite");
+    const objectStore = transaction.objectStore("tabs");
+
+    // delete old data
+    await objectStore.clear();
+
+    // save new
+    for (const tabInfo of newRecords) {
+        await objectStore.add(tabInfo);
+    }
+}
+
 // export async function* iterateTabIndex() {
 //     // set up db, transaction
 //     const db = await getDatabase();

@@ -2,7 +2,10 @@ import {
     getTabInfo,
     saveTabInfo,
     deleteTabInfo,
-    updateTabInfo
+    updateTabInfo,
+    getAllTabsInfos,
+    TabInfo,
+    replaceAllTabInfos
 } from "./data/tabs_data";
 import {
     getVisit,
@@ -13,13 +16,13 @@ import {
     CreationCause
 } from "./data/visit_data";
 
-interface WebsiteInfo {
+export interface WebsiteInfo {
     title: string;
     url: string;
     favIconUrl: string;
 }
 
-interface TabImportData {
+export interface TabImportData {
     tabId: number;
     createdBy: number | null;
     page: WebsiteInfo;
@@ -33,38 +36,131 @@ export default class TabManager {
         // browser was closed, but we saved the state last time
         // no saved state
         // add current tabs with unknown relationships (parent, creation time)
-        // this.processOpenTabs(existingTabs).then(unknownTabs => {
-        //     this.processUnknownTab;
-        // });
+
+        const existingTabsMap = existingTabs.reduce((map, tabData) => {
+            map.set(tabData.index, tabData);
+            return map;
+        }, new Map<number, TabImportData>());
+
+        this.processOpenTabs(existingTabsMap).then(unknownTabs => {
+            console.log("unkn", unknownTabs);
+            for (const tab of unknownTabs) {
+                this.processUnknownTab(tab);
+            }
+        });
     }
 
-    // private async processOpenTabs(
-    //     tabs: TabImportData[] // in index order
-    // ): Promise<TabImportData[]> {}
+    private async processOpenTabs(
+        realTabs: Map<number, TabImportData> // map because it has easy el. remove
+    ): Promise<TabImportData[]> {
+        console.log("realtabs", realTabs);
+        // our saved tab data
+        const oldTabRecords = await getAllTabsInfos();
+        console.log("oldrec", oldTabRecords);
 
-    // private async processUnknownTab(tab: TabImportData) {
-    //     try {
-    //         const visitId = await saveVisit({
-    //             creation: {
-    //                 cause: CreationCause.import,
-    //                 parentId: null,
-    //                 replacedParent: null,
-    //                 time: Date.now()
-    //             },
-    //             children: [],
-    //             page: tab.page
-    //         });
+        // save tab records that are outdated / invalid
+        const invalidTabRecords: TabInfo[] = [];
 
-    //         await saveTabInfo({
-    //             tabId: tab.tabId,
-    //             currentVisit: visitId,
-    //             createdByVisit: null,
-    //             tabPosition: tab.index
-    //         });
-    //     } catch (err) {
-    //         console.error("error saving unknown visit", err);
-    //     }
-    // }
+        // tab records to write to new db
+        // (entire db needs to be replaced: every entry invalid or has new tabId)
+        const newTabRecords: TabInfo[] = [];
+
+        // we will delete matched tabs from the realTabs array
+        // so only unknown tabs will be left at the end
+
+        const markInvalidRecord = i => {
+            console.log("invalid", i);
+            // remember that this record is invalid -> maybe use in other way
+            invalidTabRecords.push(oldTabRecords[i]);
+        };
+
+        const saveTabMatch = (i, realTab: TabImportData) => {
+            console.log("valid", i);
+            // update the record with the new tabId
+            newTabRecords.push({
+                ...oldTabRecords[i],
+                tabId: realTab.tabId
+            });
+
+            // forget this realTab, because we have found a match
+            realTabs.delete(realTab.index); // key is the tab index
+        };
+
+        // check for each tab if we have info about it:
+        // loop the saved data, check against real tabs
+        //      -> real tab lookup with in-memory map cheap, lookup of saved data
+        //      would need an extra db request with tabPosition index
+        for (let i = 0; i < oldTabRecords.length; i++) {
+            const tabRecord = oldTabRecords[i];
+            // check if this record matches a current tab
+
+            // the real tab at the specified position / index
+            const tabCandidate = realTabs.get(tabRecord.tabPosition);
+            if (!tabCandidate) {
+                // no tab at this positon exists anymore
+                // -> the tab record is outdated or invalid
+                markInvalidRecord(i);
+                continue;
+            }
+
+            // test if the candidate matches the records
+            // (test if the page is the same)
+            if (!tabRecord.currentVisit) {
+                // our record shows an empty tab
+
+                if (!tabCandidate.page) {
+                    // real tab also empty
+                    saveTabMatch(i, tabCandidate);
+                }
+            } else {
+                // get tab record page
+                const recordVisit = await getVisit(tabRecord.currentVisit);
+
+                if (recordVisit.page.url === tabCandidate.page.url) {
+                    // same tab index, same url -> propably same tab
+                    saveTabMatch(i, tabCandidate);
+                } else {
+                    // different url -> unknown tab and invalid tab record
+                    markInvalidRecord(i);
+                }
+            }
+        }
+
+        console.log("new tabr", newTabRecords);
+        // save the updated tabRecords to the db, removing old data
+        // (every single tab record is has been modified or deleted)
+        await replaceAllTabInfos(newTabRecords);
+
+        // realTabs contains now only the unknown tabs
+        // convert map to array
+        return Array.from(realTabs, ([index, tabData]) => tabData);
+    }
+
+    private async processUnknownTab(tab: TabImportData) {
+        try {
+            // save tab visit
+            const visitId = await saveVisit({
+                creation: {
+                    cause: CreationCause.import,
+                    parentId: null,
+                    replacedParent: null,
+                    time: Date.now()
+                },
+                children: [],
+                page: tab.page
+            });
+
+            // save tab info now
+            await saveTabInfo({
+                tabId: tab.tabId,
+                currentVisit: visitId,
+                createdByVisit: null,
+                tabPosition: tab.index
+            });
+        } catch (err) {
+            console.error("error saving unknown visit", err);
+        }
+    }
 
     /**
      * Save a navigation action in a tab.
