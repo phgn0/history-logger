@@ -34,7 +34,7 @@ export interface TabImportData {
 export default class TabManager {
     constructor(
         existingTabs: TabImportData[],
-        public getTabIndex: (number) => Promise<number>
+        public queryRealTabIndex: (number) => Promise<number>
     ) {
         // browser was closed, but we saved the state last time
         // no saved state
@@ -309,52 +309,61 @@ export default class TabManager {
     }
 
     /**
-     * Get the tabs that also need to be moved, if we move a tab to the
-     * tabPosition / index newIndex.
+     * Get info about the tabs that were affected and as a result also moved,
+     * after we moved a tab to a new position / index.
+     * After such a move, our internal data on the tabs position is invalid,
+     * and can be corrected by using the calculations done by this method.
+     * As such, this method assumes the internal tab data has not yet been modified
+     * since the initial tab move has taken place.
      *
-     * @param {number} startTabId The id of the tab that started the tab move
-     * action. We can stop the affected tab analysis if we ever reach it.
-     * @param {number} newIndex The tabPosition / index to move the tab to.
-     * @returns {Promise<{tabId: number, tabPosition: number}[]>} Returns a promise
-     * that resolves with an array of tabs that also have to move.
+     * @param {number} newPosition The position / index a tab was moved to.
+     * Which tab was moved there is not needed to get the affected tabs.
+     * @param {number} [stopTabId] If provided, this parameter stops the
+     * recursive calculation of affected tabs after a tab with this id was found.
+     * This can be used to prevent endless execution when a few tabs have been
+     * shifted in a circle.
+     * @returns {Promise<{ tabId: number; tabPosition: number }[]>} Returns a promise
+     * that resolves with an array of tabs that are affected by the tab move.
      * This is expressed by objects referencing a tab by its tabId, and the
-     * index the tab is moved to. The array is in reverse
-     * order, the tab moved "last" (at the end of the move chain) is in the first
-     * position. This way the moves can be applied to the database
-     * in array order, maintaining the uniqueness of the tabPosition field.
+     * index this specific tab is moved to. The array is in reverse
+     * order, the tab moved "last" (result of all other tab moves) is in the first
+     * position. This way the moves can be saved to the database
+     * in array order, while maintaining the uniqueness of the tabPosition field.
      * @memberof TabManager
      */
-    async getTabsToMove(
-        startTabId: number,
-        newIndex: number
+    async getMovedTabs(
+        newPosition: number,
+        stopTabId?: number
     ): Promise<{ tabId: number; tabPosition: number }[]> {
         try {
-            // check if there was a tab at this position (that is now moved as a result)
-            const otherTab = await getTabInfoByIndex(newIndex);
+            // check if there was a tab at this position
+            // using our tab records (that have not been updated with the tab moves)
+            const otherTab = await getTabInfoByIndex(newPosition);
 
             if (otherTab) {
-                if (otherTab.tabId === startTabId) {
-                    // otherTab is the tab that started this move chain
-                    // (first tab that got moved)
-                    // so it already got moved -> done
+                if (stopTabId && otherTab.tabId === stopTabId) {
+                    // we got all affected tabs -> stop recursion
                     return [];
                 }
+                // "otherTab" is affected by our last tab move
 
-                // check where this tab is after the move event
-                const newIndex = await this.getTabIndex(otherTab.tabId);
+                // check where this tab really is after the move event
+                const newIndex = await this.queryRealTabIndex(otherTab.tabId);
 
-                // check if the move in turn moved some other tabs
+                // check if this move in turn also moved other tabs, and return
+                // info about these moves
                 // (continues recursively)
-                const moves = await this.getTabsToMove(startTabId, newIndex);
+                const moves = await this.getMovedTabs(newIndex, stopTabId);
 
-                // add our move at the end -> can apply moves in array order
+                // add our move (of "otherTab") at the end
+                // -> can apply moves in array order, tabPositon remains unique
                 moves.push({
                     tabId: otherTab.tabId,
                     tabPosition: newIndex
                 });
                 return moves;
             } else {
-                // we're fine, no other tab moved
+                // we're fine, no other tabs are affected by our move
                 // (reached right side of tab bar)
                 return [];
             }
@@ -364,41 +373,34 @@ export default class TabManager {
         }
     }
 
-    async moveTab(tabId: number, oldIndex: number, newIndex: number) {
-        // there exists no api to listen to tab index changes, exept manual move events
-        // so check here if we moved any other tabs by our action
+    /**
+     * Saves a manual move of a tab in the tab bar.
+     * This also calculates and saves all other affected and as a result moved
+     * tabs, because the browser.tabs interface only gives info about the tab
+     * that was moved.
+     *
+     * @param {number} tabId The id of the tab that was moved.
+     * @param {number} newIndex The new position / index the tab was moved to.
+     * @returns Resolves when the saving is complete.
+     * @memberof TabManager
+     */
+    async moveTabManual(tabId: number, newIndex: number) {
+        // a manual tab move always shifts tabs around in a circle
 
         // get tabs also affected by our move
-        // is in reverse dependency order, so moves can be applied in array order
-        const tabs = await this.getTabsToMove(tabId, newIndex);
-        console.log("move chain: ", tabs);
+        // stop recursive calcualtion of affected tabs when we reach "tabId"
+        // (the first moved tab), because else we would be looping again
+        const moves = await this.getMovedTabs(newIndex, tabId);
 
-        if (!tabs) {
-            // no other tabs are moved by our action
-            // so just save our new position
-            await updateTabInfo(tabId, tabInfo => {
-                tabInfo.tabPosition = newIndex;
-                return tabInfo;
-            });
-            return;
-        }
-
-        if (tabs[0].tabPosition === oldIndex) {
-            // we're rotating tabs in a circle
-            // so the first tab goes to our old index
-            // to maintain the uniqueness of the tabPosition, remove the our
-            // tab, and add it after we're done saving the other tabs
-            // (breaking the circle)
-            await saveTabMoveChain(tabs, {
-                tabId: tabId,
-                tabPosition: newIndex
-            });
-        } else {
-            // no problems with tabPosition uniqueness
-            // just apply tab moves
-            await saveTabMoveChain(tabs);
-        }
-        console.log("done");
+        // "moves" is in reverse causation order, each move is the result of
+        // the move after it.
+        // so moves can be saved in array order, the tabPosition field remains unique.
+        // we just have to remove the first tab from our records before we start
+        // saving the new positons, and re-add it with its new pos. afterwards
+        await saveTabMoveChain(moves, {
+            tabId: tabId,
+            tabPosition: newIndex
+        });
     }
 
     selectTab(tabId) {}

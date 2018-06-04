@@ -91,7 +91,7 @@ browser.tabs.onMoved.addListener(
         info: { windowId: number; fromIndex: number; toIndex: number }
     ) => {
         getTabManager().then(tabManager => {
-            tabManager.moveTab(tabId, info.fromIndex, info.toIndex);
+            tabManager.moveTabManual(tabId, info.toIndex);
         });
     }
 );
