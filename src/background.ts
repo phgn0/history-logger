@@ -38,7 +38,7 @@ const tabManagerInit = browser.tabs.query({}).then((tabs: TabObject[]) => {
     });
 
     // initialize tab manager with imported tabs
-    _tabManager = new TabManager(tabData);
+    _tabManager = new TabManager(tabData, getTabIndex);
 
     return Promise.resolve(_tabManager);
 });
@@ -54,8 +54,14 @@ function getTabManager(): Promise<TabManager> {
     }
 }
 
+function getTabIndex(tabId: number): Promise<number> {
+    return browser.tabs.get(tabId).then((tab: TabObject) => {
+        return Promise.resolve(tab.index);
+    });
+}
+
 browser.tabs.onActivated.addListener(({ tabId, windowId }) => {
-    console.log("active tab: ", tabId);
+    // console.log("active tab: ", tabId);
 });
 
 browser.tabs.onCreated.addListener((tab: TabObject) => {
@@ -74,6 +80,21 @@ browser.tabs.onRemoved.addListener((tabId: number) => {
         tabManager.closeTab(tabId);
     });
 });
+
+// browser.webNavigation.onCommitted.addListener(details => {
+//     console.log(details);
+// });
+
+browser.tabs.onMoved.addListener(
+    (
+        tabId: number,
+        info: { windowId: number; fromIndex: number; toIndex: number }
+    ) => {
+        getTabManager().then(tabManager => {
+            tabManager.moveTab(tabId, info.fromIndex, info.toIndex);
+        });
+    }
+);
 
 // notify when we visit a new url
 browser.tabs.onUpdated.addListener(

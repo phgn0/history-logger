@@ -85,7 +85,7 @@ export function saveVisit(visit: Visit): Promise<number> {
  */
 export function getVisit(visitId: number): Promise<Visit> {
     return getDatabase().then(db => {
-        const transaction = db.transaction(["visits"]);
+        const transaction = db.transaction(["visits"], "readonly");
         const objectStore = transaction.objectStore("visits");
 
         return objectStore.get(visitId);

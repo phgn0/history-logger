@@ -6,7 +6,7 @@
     "icons": {
         "96": "dist/icons/graph_96.png"
     },
-    "permissions": ["tabs", "storage"],
+    "permissions": ["tabs", "storage", "webNavigation"],
     "content_security_policy":
         "script-src 'self' 'unsafe-eval'; object-src 'self';",
     "background": {
