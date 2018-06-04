@@ -253,24 +253,29 @@ export default class TabManager {
             let parentVisit;
             if (createdByTab) {
                 // the parent tab must have a view to create another tab
-                parentVisit = (await getTabInfo(createdByTab)) || null;
+                parentVisit = await getTabInfo(createdByTab);
                 parentVisit = parentVisit ? parentVisit.currentVisit : null;
             } else {
                 parentVisit = null;
             }
 
-            saveTabInfo({
+            // get tabs that have been moved
+            // (after creating a tab at position "tabPosition")
+            // this will only be tabs moved to the right -> no circle shift possible
+            const moves = await this.getMovedTabs(tabPosition);
+            if (moves.length !== 0) {
+                // tabs have been moved
+                // apply these changes to the database
+                await saveTabMoveChain(moves);
+            }
+
+            // now save the new tab
+            await saveTabInfo({
                 tabId,
                 currentVisit: null,
                 createdByVisit: parentVisit,
                 tabPosition
             });
-
-            // check if there was a tab at this positon (that is now moved away)
-
-            if (true) {
-                // move this tab to its real position
-            }
         } catch (err) {
             console.error("create tab err", err);
         }
