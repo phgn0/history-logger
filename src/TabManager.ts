@@ -7,7 +7,8 @@ import {
     TabInfo,
     replaceAllTabInfos,
     getTabInfoByIndex,
-    saveTabMoveChain
+    saveTabMoveChain,
+    moveTabsLeft
 } from "./data/tabs_data";
 import {
     getVisit,
@@ -308,6 +309,10 @@ export default class TabManager {
                     return visit;
                 });
             }
+
+            // other tabs have moved to fill the spot of the closed tab in the tab bar
+            // so move every tab right to the closed tab one spot left (in the db)
+            await moveTabsLeft(tabInfo.tabPosition + 1);
         } catch (err) {
             console.error("close tab error", err);
         }

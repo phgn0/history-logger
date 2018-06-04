@@ -202,3 +202,28 @@ export async function saveTabMoveChain(
         });
     }
 }
+
+export async function moveTabsLeft(startIndex: number): Promise<void> {
+    const db = await getDatabase();
+    const transaction = db.transaction(["tabs"], "readwrite");
+    const objectStore = transaction.objectStore("tabs");
+
+    const storeIndex = objectStore.index("tabPosition");
+
+    // index.get() throws if there is no record, we want null
+    const getTabOrNull = (index: number) => {
+        return storeIndex.get(index).catch(() => {
+            return Promise.resolve(null);
+        });
+    };
+
+    let currentIndex = startIndex;
+    let tabInfo: TabInfo = await getTabOrNull(currentIndex);
+    while (tabInfo) {
+        // move tab 1 position left
+        await objectStore.put({ ...tabInfo, tabPosition: currentIndex - 1 });
+
+        currentIndex++;
+        tabInfo = await getTabOrNull(currentIndex);
+    }
+}
