@@ -60,10 +60,6 @@ function getTabIndex(tabId: number): Promise<number> {
     });
 }
 
-browser.tabs.onActivated.addListener(({ tabId, windowId }) => {
-    // console.log("active tab: ", tabId);
-});
-
 browser.tabs.onCreated.addListener((tab: TabObject) => {
     // console.log("created: ", tab.url);
     getTabManager().then(tabManager => {
@@ -81,10 +77,6 @@ browser.tabs.onRemoved.addListener((tabId: number) => {
     });
 });
 
-// browser.webNavigation.onCommitted.addListener(details => {
-//     console.log(details);
-// });
-
 browser.tabs.onMoved.addListener(
     (
         tabId: number,
@@ -97,19 +89,21 @@ browser.tabs.onMoved.addListener(
 );
 
 // notify when we visit a new url
-browser.tabs.onUpdated.addListener(
-    (tabId: number, changeInfo: { status: string }, tab: TabObject) => {
-        // we cant use the onUpdated filter method, because compatibility is bad
-        // so filter here for complete page load
-        if (changeInfo.status === "complete") {
-            // we completed loading a page
-            // console.log("updated: " + tabId + " ", tab.url, tab.openerTabId);
-            getTabManager().then(tabManager => {
-                tabManager.navigateTo(tabId, {
-                    url: tab.url,
-                    title: tab.title,
-                    favIconUrl: tab.favIconUrl
-                });
+browser.webNavigation.onCommitted.addListener(
+    async function handleNavigation(details: {
+        tabId: number;
+        url: string;
+        transitionType: string;
+    }) {
+        if (details.transitionType !== "auto_subframe") {
+            console.log(details);
+            const tab: TabObject = await browser.tabs.get(details.tabId);
+            const tabManager = await getTabManager();
+
+            tabManager.navigateTo(details.tabId, {
+                url: tab.url,
+                title: tab.title,
+                favIconUrl: tab.favIconUrl
             });
         }
     }
