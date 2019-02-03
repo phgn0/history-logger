@@ -4,8 +4,6 @@ import TabManager, { TabImportData } from "./TabManager";
 
 declare const browser: any; // the browser object
 
-console.log("hi");
-
 // the properties we use from the tab object
 // https://developer.mozilla.org/en-US/Add-ons/WebExtensions/API/tabs/Tab
 interface TabObject {
@@ -21,8 +19,6 @@ let _tabManager: TabManager;
 
 // get all open tabs
 const tabManagerInit = browser.tabs.query({}).then((tabs: TabObject[]) => {
-    // console.log("all", tabs);
-
     // convert tab data to our data format
     const tabData: TabImportData[] = tabs.map((tab: TabObject) => {
         return {
@@ -61,7 +57,6 @@ function getTabIndex(tabId: number): Promise<number> {
 }
 
 browser.tabs.onCreated.addListener((tab: TabObject) => {
-    // console.log("created: ", tab.url);
     getTabManager().then(tabManager => {
         tabManager.createTab(
             tab.id,
@@ -96,7 +91,6 @@ browser.webNavigation.onCommitted.addListener(
         transitionType: string;
     }) {
         if (details.transitionType !== "auto_subframe") {
-            console.log(details);
             const tab: TabObject = await browser.tabs.get(details.tabId);
             const tabManager = await getTabManager();
 
