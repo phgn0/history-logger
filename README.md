@@ -1,8 +1,8 @@
 # history logger
 
-## overview
+## Overview
 
-This experiment is part of a general idea of mine to use browser history data to discover website relationships. Ask me about it, I have a few cool products in mind... :)
+This experiment is part of a general idea of mine to use browser history data to discover website relationships.
 
 The browser extension here gathers site relationships beyond whats accessible with the [webextension history api](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/history):
 
@@ -13,13 +13,17 @@ The browser extension here gathers site relationships beyond whats accessible wi
 
 This allows us to build a rich navigation graph, not just one based on time correlation alone.
 
-## technical overview
+## Technical overview
 
 It's a basic webextension written in typescript.
 
 For data access it uses the [webextension tab api](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/tabs).
 
-## current status
+The captured user actions are saved to an indexedDB database via the background script.
+
+To use it, install the manifest.json as a temporary extension in your browser. Open the devtools for the extension (via "debug"), and you can see the saved data in the storage inspector.
+
+## Current status
 
 It does save navigation data reliably, though:
 
